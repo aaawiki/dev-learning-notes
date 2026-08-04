@@ -1,6 +1,6 @@
 # 笔记标题：Java 编译报错"找不到符号"——Lombok 注解未生效的排查
 
-> 日期：2026-07-28
+> 日期：2026-07-28（2026-08-04 补充版本兼容性分析）
 > 标签：`Java` `Lombok` `IntelliJ-IDEA` `Maven` `编译报错` `黑马外卖`
 > 类型：日志笔记（问题排查）
 
@@ -33,17 +33,11 @@ java: 找不到符号
 
 ## 解决方法
 
-### 方案一：IDE 开启 Lombok 注解处理器（最常见原因）
+### 优先排查：Lombok 版本过低，不兼容当前 JDK（已开注解处理器仍报错时）
 
-1. **安装 Lombok 插件**：`File` → `Settings` → `Plugins` → 搜索 **Lombok** → 安装并重启 IDE
-2. **开启注解处理器**：`File` → `Settings` → `Build, Execution, Deployment` → `Compiler` → `Annotation Processors` → ✅ 勾选 **Enable annotation processing**
-3. **重新编译**：`Build` → `Rebuild Project`
+> 如果你**已经装了 Lombok 插件、也勾了 Enable annotation processing，但照样报这组错**，那基本可以锁定是下面这个原因。
 
-> 较新版本 IDEA（2020.3+）Lombok 插件已内置，只需确认步骤 2 已勾选即可。
-
-### 方案二：Lombok 版本过低，不兼容当前 JDK（已开注解处理器仍报错时）
-
-项目用的 **Lombok 1.18.20（2021 年发布）最高只支持到 JDK 16**。若本机 JDK 是 **17 或更高**，注解处理器会静默失败——不报错也不生成代码，表现和没开注解处理器一样。
+项目用的 **Lombok 1.18.20（2021 年发布）最高只支持到 JDK 16**。Spring Boot 2.7.3 的 parent 默认把 `<java.version>` 设成 Java 11，但**很多人本机实际装的是 JDK 17 甚至 21**。在 JDK 17+ 上，Lombok 1.18.20 的注解处理器会**静默失败**——不报错、也不生成代码，表现和「没开注解处理器」一模一样，所以极易被误判。
 
 **统一升级到 `1.18.30`**（支持 JDK 17/18/19/20/21）：
 
@@ -63,13 +57,21 @@ java: 找不到符号
 
 改完后：
 1. IDEA 右侧 Maven 面板点击 🔄 **Reload All Maven Projects**
-2. `Build` → `Rebuild Project`
+2. 菜单栏 `Build` → `Rebuild Project`
+
+### 基础排查：IDE 未开启 Lombok 注解处理器（首次遇到时）
+
+1. **安装 Lombok 插件**：`File` → `Settings` → `Plugins` → 搜索 **Lombok** → 安装并重启 IDE
+2. **开启注解处理器**：`File` → `Settings` → `Build, Execution, Deployment` → `Compiler` → `Annotation Processors` → ✅ 勾选 **Enable annotation processing**
+3. **重新编译**：`Build` → `Rebuild Project`
+
+> 较新版本 IDEA（2020.3+）Lombok 插件已内置，只需确认步骤 2 已勾选即可。
 
 ### 仍不行的兜底排查
 
 | 排查项 | 操作 |
 |--------|------|
-| ① 确认 JDK 版本 | `File` → `Project Structure` → `Project` 查看 SDK 版本 |
+| ① 确认 JDK 版本 | `File` → `Project Structure` → `Project` 查看 SDK 版本（重点看是不是 17/21） |
 | ② 清除 Maven 缓存 | `cmd` 中执行：`cd /d D:\develop\黑马\sky-takeout\资料\day01\后端初始工程\sky-take-out && mvn clean install -DskipTests` |
 | ③ 删除 IDEA 缓存 | `File` → `Invalidate Caches` → 全部勾选 → `Invalidate and Restart` |
 
@@ -87,7 +89,7 @@ Lombok 通过操作 Java 编译器的内部 API 来注入代码，这些内部 A
 
 **两个触发条件的区别**
 - 注解处理器没开 → 所有 Lombok 注解都不生效
-- 注解处理器开了但 Lombok 版本太低 → 高版本 JDK 下同样不生效，且更难察觉
+- 注解处理器开了但 Lombok 版本太低 → 高版本 JDK 下同样不生效，且更难察觉（因为你会以为「我都配置好了」）
 
 ---
 
@@ -96,7 +98,7 @@ Lombok 通过操作 Java 编译器的内部 API 来注入代码，这些内部 A
 - **先看报错性质，再判断方向**：一连串 `找不到符号` 且全是 getter/builder 这类「本该自动生成」的方法，基本可以直接锁定 Lombok 没生效，不用去翻实体类代码。
 - **「已配置但不生效」要往版本兼容性想**：很多人把注解处理器开了就以为万事大吉，忽略了 Lombok 版本与 JDK 版本的硬约束。这是依赖管理里很典型的一类坑。
 - **静默失败比报错更危险**：Lombok 版本不匹配时不会大声报错，只是「什么都没生成」，排查时容易在错误的方向上浪费时间。养成「先确认工具链版本矩阵」的习惯能省很多事。
-- **排查顺序**：IDE 配置（插件 + 注解处理器）→ 依赖版本（Lombok ↔ JDK）→ 缓存清理（Maven + IDEA）。由浅入深，不要一上来就 invalidate caches。
+- **排查顺序**：先确认 JDK 版本 → 升级 Lombok 到匹配版本 → IDE 配置（插件 + 注解处理器）→ 缓存清理（Maven + IDEA）。由浅入深，不要一上来就 invalidate caches。
 
 ---
 
