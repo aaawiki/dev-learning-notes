@@ -2,7 +2,7 @@
 # ============================================================
 # Debian 云服务器一键配置脚本
 # 适用于: Debian 12/13 (bookworm/trixie) AWS EC2 等云环境
-# 功能:   修复 apt 源 → 装 XFCE 桌面 → 配 xrdp 远程桌面
+# 功能:   修复 apt 源 → 装 XFCE 桌面 → 配 xrdp 远程桌面 → 装 Docker
 # 用法:   chmod +x setup.sh && sudo ./setup.sh
 # ============================================================
 set -e
@@ -15,7 +15,7 @@ echo "=========================================="
 # Debian 12+ 使用 DEB822 格式(.sources)，若 Types 含 deb-src
 # 可能导致主仓库被跳过，仅保留 security 仓库。
 echo ""
-echo "[1/4] 检查并修复 APT 源..."
+echo "[1/5] 检查并修复 APT 源..."
 
 SOURCE_FILE="/etc/apt/sources.list.d/debian.sources"
 if [ -f "$SOURCE_FILE" ]; then
@@ -38,13 +38,13 @@ echo "  ✓ APT 源更新完成 ($(apt list 2>/dev/null | wc -l) 个包可用)"
 
 # ---- 2. 安装 XFCE 桌面 ----
 echo ""
-echo "[2/4] 安装 XFCE 桌面环境 (可能需要几分钟)..."
+echo "[2/5] 安装 XFCE 桌面环境 (可能需要几分钟)..."
 apt-get install -y -qq xfce4 xfce4-goodies
 echo "  ✓ XFCE 4.x 安装完成"
 
 # ---- 3. 安装 xrdp (远程桌面) ----
 echo ""
-echo "[3/4] 安装 xrdp 远程桌面..."
+echo "[3/5] 安装 xrdp 远程桌面..."
 apt-get install -y -qq xrdp xorgxrdp
 systemctl enable --now xrdp
 
@@ -55,9 +55,15 @@ for home in /home/*; do
 done
 echo "  ✓ xrdp 已启动，监听 3389 端口"
 
-# ---- 4. 创建新用户 (可选) ----
+# ---- 4. 安装 Docker ----
 echo ""
-echo "[4/4] 用户设置"
+echo "[4/5] 安装 Docker..."
+curl -fsSL https://get.docker.com | sh
+echo "  ✓ Docker $(docker --version | cut -d' ' -f3 | cut -d',' -f1) 安装完成"
+
+# ---- 5. 创建新用户 (可选) ----
+echo ""
+echo "[5/5] 用户设置"
 DEFAULT_USER="wzy"
 read -p "  创建新用户? (默认: $DEFAULT_USER, 按回车确认或输入用户名): " NEW_USER
 NEW_USER="${NEW_USER:-$DEFAULT_USER}"
@@ -68,10 +74,10 @@ if ! id "$NEW_USER" &>/dev/null; then
     echo ""
     useradd -m -s /bin/bash "$NEW_USER"
     echo "${NEW_USER}:${USER_PASS}" | chpasswd
-    usermod -aG sudo "$NEW_USER"
+    usermod -aG sudo,docker "$NEW_USER"
     echo "startxfce4" > "/home/${NEW_USER}/.xsession"
     chown "${NEW_USER}:${NEW_USER}" "/home/${NEW_USER}/.xsession"
-    echo "  ✓ 用户 $NEW_USER 已创建并加入 sudo 组"
+    echo "  ✓ 用户 $NEW_USER 已创建并加入 sudo, docker 组"
 else
     echo "  ⚠ 用户 $NEW_USER 已存在，跳过创建"
 fi
